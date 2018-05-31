@@ -16,6 +16,7 @@ public class Controller {
 
     @FXML
     private void startServer(){
+        startServerButton.setDisable(true);
         server = new Server(textArea);
         Thread t = new Thread(server);
         t.start();

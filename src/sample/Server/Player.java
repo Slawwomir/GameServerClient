@@ -1,7 +1,5 @@
 package sample.Server;
 
-import javafx.geometry.Pos;
-
 public class Player {
     private Position position;
 
