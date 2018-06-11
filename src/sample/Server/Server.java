@@ -1,30 +1,29 @@
 package sample.Server;
 
 import javafx.scene.control.TextArea;
+import sample.GameState;
 import sample.Player.Player;
 import sample.Player.PlayerProperties;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
 
 public class Server implements Runnable {
-    public static final int MAX_CLIENTS = 3;
+    public static final int MAX_CLIENTS = 2;
 
     private int connectedClients;
     private TextArea textArea;
-    private List<Player> players;
+    private List<PlayerProperties> players;
     private ExecutorService executor;
+    private GameState gameState;
 
     public Server(TextArea textArea) {
-        players = new ArrayList<>(2);
-        players.add(new Player());
-        players.add(new Player());
+        gameState = new GameState();
+        players = gameState.getPlayersProperties();
         this.textArea = textArea;
         executor = Executors.newFixedThreadPool(2);
     }
@@ -37,7 +36,7 @@ public class Server implements Runnable {
             while(connectedClients < MAX_CLIENTS){
                 Socket incoming = s.accept();
                 textArea.appendText("New client [" + connectedClients + "] connected\n");
-                players.add(new Player());
+                //players.add(new Player());
                 Runnable r = new ThreadedHandler(this, incoming, textArea, connectedClients);
                 executor.execute(r);
                 //Thread t = new Thread(r);
@@ -54,8 +53,12 @@ public class Server implements Runnable {
         return connectedClients == 2;
     }
 
-    public List<Player> getPlayers(){
+    public List<PlayerProperties> getPlayersProperties(){
         return players;
+    }
+
+    public GameState getGameState() {
+        return gameState;
     }
 }
 
@@ -77,8 +80,6 @@ class ThreadedHandler implements Runnable {
         try(InputStream inStream = socket.getInputStream();
             OutputStream outStream = socket.getOutputStream()){
 
-            //Scanner scanner = new Scanner(inStream, "UTF-8");
-            //PrintWriter writer = new PrintWriter(new OutputStreamWriter(outStream, "UTF-8"), true);
             textArea.appendText("[" + identity + "] Waiting for second player\n");
 
             ObjectInputStream objectInputStream = new ObjectInputStream(inStream);
@@ -86,23 +87,35 @@ class ThreadedHandler implements Runnable {
 
             textArea.appendText("[" + identity + "] Successfully connected!\n");
 
+            PlayerProperties initial = server.getGameState().getPlayersProperties().get(identity);
+            objectOutputStream.writeObject(initial);
+
+            initial = server.getGameState().getPlayersProperties().get(identity^1);
+            objectOutputStream.writeObject(initial);
+
+            objectOutputStream.writeObject(server.getGameState());
             while(true){
                 try {
-                    PlayerProperties incoming = (PlayerProperties) objectInputStream.readObject();
-                    server.getPlayers().get(identity).update(incoming);
+                    /*
                     //while(!server.ifTwoPlayersAreConnected());
-                    objectOutputStream.writeObject(server.getPlayers().get(identity ^ 1).getProperties());
+                    PlayerProperties dowyslania = server.getGameState().getPlayersProperties().get(identity ^ 1);
+                    objectOutputStream.writeObject(new PlayerProperties(dowyslania.x, dowyslania.y));
+                    PlayerProperties odebrane = (PlayerProperties) objectInputStream.readObject();
+                    server.getGameState().getPlayersProperties().get(identity).update(odebrane);
+                    //System.out.println(identity + ". wysylam " + dowyslania.x + "." + dowyslania.y + " | Odbieram " + odebrane.x + "." + odebrane.y);
+                    */
+                    GameState state = server.getGameState();
+                    objectOutputStream.writeObject(new GameState(state));
+                    System.out.println(identity + "-0: " + server.getGameState().getPlayersProperties().get(0).x + "|" + server.getGameState().getPlayersProperties().get(0).y +
+                            " --- 1 " + server.getGameState().getPlayersProperties().get(1).x + "|" + server.getGameState().getPlayersProperties().get(1).y);
+                    GameState in = (GameState) objectInputStream.readObject();
+                    server.getGameState().updateOne(in, identity);
+
                 } catch (ClassNotFoundException | IOException e){
                     e.printStackTrace();
                     break;
                 }
             }
-            /*while(scanner.hasNextLine()){
-                String line = scanner.nextLine();
-                textArea.appendText("[" + identity + "]" + line + "\n");
-                if(line.trim().equals("BYE"))
-                    break;
-            }*/
         }catch (IOException e){
             e.printStackTrace();
         }
