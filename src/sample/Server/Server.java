@@ -90,12 +90,12 @@ class ThreadedHandler implements Runnable {
         try(InputStream inStream = socket.getInputStream();
             OutputStream outStream = socket.getOutputStream()){
 
-            textArea.appendText("[" + identity + "] Waiting for second player\n");
+            //textArea.appendText("[" + identity + "] Waiting for second player\n");
 
             ObjectInputStream objectInputStream = new ObjectInputStream(inStream);
             ObjectOutputStream objectOutputStream = new ObjectOutputStream(outStream);
 
-            textArea.appendText("[" + identity + "] Successfully connected!\n");
+            //textArea.appendText("[" + identity + "] Successfully connected!\n");
 
             while(!server.ifTwoPlayersAreConnected());
 
@@ -106,23 +106,27 @@ class ThreadedHandler implements Runnable {
             new java.util.Timer().scheduleAtFixedRate(new TimerTask() {
                 @Override
                 public void run() {
-                    synchronized (lock){
+                    synchronized (lock) {
                         Arrays.stream(server.getGameState().getBoardProperties().getElements())
                                 .flatMap(Arrays::stream)
                                 .filter(el -> el.getDelayTime() > 0).forEach(el -> {
-                                el.setDelayTime(Math.max(el.getDelayTime() - 100,0));
-                                if(el.getDelayTime() == 0)
-                                    el.setUsed(false);
-                                });
+                            el.setDelayTime(Math.max(el.getDelayTime() - 100, 0));
+                            if (el.getDelayTime() == 0)
+                                el.setUsed(false);
+                        });
                     }
+                    int k = (int)Arrays.stream(server.getGameState().getBoardProperties().getElements())
+                            .flatMap(Arrays::stream)
+                            .filter(el -> el.getSign() == 'o' && !el.isUsed()).count();
+                    k -= 1;
+                    server.getGameState().increaseWaterLevel(k*0.5);
                 }
-            }, 500, 500);
+            }, 500, 200);
 
             GameState state, in;
             while(true){
                 try {
                     in = (GameState) objectInputStream.readObject();
-
                     synchronized (lock) {
                         state = server.getGameState();
                         state.updateOne(in, identity);

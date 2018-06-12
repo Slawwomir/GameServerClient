@@ -28,23 +28,23 @@ public class BoardProperties implements Serializable {
                     switch (c) {
                         case 'd':
                         case 'w':   // wall
-                            elements[i][j] = new BoardElementProperties(false, false);
+                            elements[i][j] = new BoardElementProperties(false, false, c);
                             break;
                         case 'p':
                             playersPositions.add(new Point(i, j));
-                            elements[i][j] = new BoardElementProperties(true, false);
+                            elements[i][j] = new BoardElementProperties(true, false, c);
                             break;
                         case 't':
-                            elements[i][j] = new BoardElementProperties(true, false, 0);
+                            elements[i][j] = new BoardElementProperties(true, false, 0, c);
                             break;
                         case 'x':
                             //waterLevel = (i+1)*elementSize;
                         case 'o':
                         case 'f':   // floor
-                            elements[i][j] = new BoardElementProperties(true, false);
+                            elements[i][j] = new BoardElementProperties(true, false, c);
                             break;
                         case 'c': {  //connected with
-                            elements[i][j] = new BoardElementProperties(true, false);
+                            elements[i][j] = new BoardElementProperties(true, false, c);
                             String xe = line.substring(k+2, k+line.substring(k+1).indexOf(']') + 1);
                             k += xe.length() + 2;
                         }

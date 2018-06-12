@@ -5,8 +5,6 @@ import javafx.geometry.Pos;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
-import java.io.Serializable;
-
 public class Player {
     private ImageView character;
     private Position position;

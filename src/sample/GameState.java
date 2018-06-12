@@ -15,12 +15,13 @@ public class GameState implements Serializable {
     private int elementSize = 35;
     private boolean changesInElements;
     private List<Point> changed;
+    private double waterLevel;
 
     public GameState(){
         players = new ArrayList<>(2);
         boardProperties = new BoardProperties();
         changed = new ArrayList<>();
-
+        waterLevel = 0;
         int id = 0;
         for(Point pos : boardProperties.getPlayersPositions()){
             PlayerProperties p = new PlayerProperties(pos.y * elementSize, pos.x*elementSize, id);
@@ -36,6 +37,7 @@ public class GameState implements Serializable {
         for(PlayerProperties pp : gameState.getPlayersProperties())
             players.add(new PlayerProperties(pp.x, pp.y, pp.id));
 
+        this.waterLevel = gameState.waterLevel;
         this.boardProperties = new BoardProperties(gameState.boardProperties.getElements());
     }
 
@@ -86,5 +88,14 @@ public class GameState implements Serializable {
 
     public synchronized void setChanged(List<Point> changed) {
         this.changed.addAll(changed);
+    }
+
+    public void increaseWaterLevel(double addition){
+        if(waterLevel >= 0)
+        waterLevel+=addition;
+    }
+
+    public double getWaterLevel() {
+        return waterLevel;
     }
 }
