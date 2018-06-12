@@ -1,14 +1,20 @@
 package sample.Server;
 
 import javafx.scene.control.TextArea;
+import sample.Board.BoardElementProperties;
 import sample.GameState;
 import sample.Player.Player;
 import sample.Player.PlayerProperties;
 
+import javax.swing.*;
+import java.awt.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -30,7 +36,7 @@ public class Server implements Runnable {
 
     @Override
     public void run() {
-        try(ServerSocket s = new ServerSocket(9090)){
+        try(ServerSocket s = new ServerSocket(9191)){
 
             textArea.appendText("Server has been successfully initialized. Waiting for clients...\n");
             while(connectedClients < MAX_CLIENTS){
@@ -49,7 +55,7 @@ public class Server implements Runnable {
         }
     }
 
-    public boolean ifTwoPlayersAreConnected(){
+    public synchronized boolean ifTwoPlayersAreConnected(){
         return connectedClients == 2;
     }
 
@@ -67,12 +73,16 @@ class ThreadedHandler implements Runnable {
     private Socket socket;
     private TextArea textArea;
     private int identity;
+    private final static Object lock = new Object();
+    private final static Object queue = new Object();
+    private List<Point> toTurnOff;
 
     ThreadedHandler(Server server, Socket socket, TextArea textArea, int identity){
         this.server = server;
         this.socket = socket;
         this.textArea = textArea;
         this.identity = identity;
+        toTurnOff = new ArrayList<>();
     }
 
     @Override
@@ -87,29 +97,43 @@ class ThreadedHandler implements Runnable {
 
             textArea.appendText("[" + identity + "] Successfully connected!\n");
 
-            PlayerProperties initial = server.getGameState().getPlayersProperties().get(identity);
-            objectOutputStream.writeObject(initial);
+            while(!server.ifTwoPlayersAreConnected());
 
-            initial = server.getGameState().getPlayersProperties().get(identity^1);
-            objectOutputStream.writeObject(initial);
-
+            objectOutputStream.writeObject(server.getGameState().getPlayersProperties().get(identity));
+            objectOutputStream.writeObject(server.getGameState().getPlayersProperties().get(identity^1));
             objectOutputStream.writeObject(server.getGameState());
+
+            new java.util.Timer().scheduleAtFixedRate(new TimerTask() {
+                @Override
+                public void run() {
+                    synchronized (lock){
+                        Arrays.stream(server.getGameState().getBoardProperties().getElements())
+                                .flatMap(Arrays::stream)
+                                .filter(el -> el.getDelayTime() > 0).forEach(el -> {
+                                el.setDelayTime(Math.max(el.getDelayTime() - 100,0));
+                                if(el.getDelayTime() == 0)
+                                    el.setUsed(false);
+                                });
+                    }
+                }
+            }, 500, 500);
+
+            GameState state, in;
             while(true){
                 try {
-                    /*
-                    //while(!server.ifTwoPlayersAreConnected());
-                    PlayerProperties dowyslania = server.getGameState().getPlayersProperties().get(identity ^ 1);
-                    objectOutputStream.writeObject(new PlayerProperties(dowyslania.x, dowyslania.y));
-                    PlayerProperties odebrane = (PlayerProperties) objectInputStream.readObject();
-                    server.getGameState().getPlayersProperties().get(identity).update(odebrane);
-                    //System.out.println(identity + ". wysylam " + dowyslania.x + "." + dowyslania.y + " | Odbieram " + odebrane.x + "." + odebrane.y);
-                    */
-                    GameState state = server.getGameState();
-                    objectOutputStream.writeObject(new GameState(state));
-                    System.out.println(identity + "-0: " + server.getGameState().getPlayersProperties().get(0).x + "|" + server.getGameState().getPlayersProperties().get(0).y +
-                            " --- 1 " + server.getGameState().getPlayersProperties().get(1).x + "|" + server.getGameState().getPlayersProperties().get(1).y);
-                    GameState in = (GameState) objectInputStream.readObject();
-                    server.getGameState().updateOne(in, identity);
+                    in = (GameState) objectInputStream.readObject();
+
+                    synchronized (lock) {
+                        state = server.getGameState();
+                        state.updateOne(in, identity);
+                        if (in.isChangesInElements()) {
+                            //state.setBoardProperties(in.getBoardProperties());
+                            state.updateChanged(in);
+                        }
+
+                        GameState out = new GameState(state);
+                        objectOutputStream.writeObject(out);
+                    }
 
                 } catch (ClassNotFoundException | IOException e){
                     e.printStackTrace();
