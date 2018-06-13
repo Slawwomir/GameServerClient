@@ -1,12 +1,9 @@
 package sample.Server;
 
 import javafx.scene.control.TextArea;
-import sample.Board.BoardElementProperties;
 import sample.GameState;
-import sample.Player.Player;
 import sample.Player.PlayerProperties;
 
-import javax.swing.*;
 import java.awt.*;
 import java.io.*;
 import java.net.ServerSocket;
@@ -26,6 +23,7 @@ public class Server implements Runnable {
     private List<PlayerProperties> players;
     private ExecutorService executor;
     private GameState gameState;
+    private boolean change;
 
     public Server(TextArea textArea) {
         gameState = new GameState();
@@ -66,6 +64,14 @@ public class Server implements Runnable {
     public GameState getGameState() {
         return gameState;
     }
+
+    public synchronized boolean isChange() {
+        return change;
+    }
+
+    public synchronized void setChange(boolean change) {
+        this.change = change;
+    }
 }
 
 class ThreadedHandler implements Runnable {
@@ -76,6 +82,7 @@ class ThreadedHandler implements Runnable {
     private final static Object lock = new Object();
     private final static Object queue = new Object();
     private List<Point> toTurnOff;
+    private Thread readThread;
 
     ThreadedHandler(Server server, Socket socket, TextArea textArea, int identity){
         this.server = server;
@@ -113,35 +120,30 @@ class ThreadedHandler implements Runnable {
                             el.setDelayTime(Math.max(el.getDelayTime() - 100, 0));
                             if (el.getDelayTime() == 0)
                                 el.setUsed(false);
+
                         });
+
+                        int k = (int) Arrays.stream(server.getGameState().getBoardProperties().getElements())
+                                .flatMap(Arrays::stream)
+                                .filter(el -> el.getSign() == 'o' && !el.isUsed()).count();
+                        k -= 1;
+                        server.getGameState().increaseWaterLevel(k * 0.5);
+                        server.setChange(true);
                     }
-                    int k = (int)Arrays.stream(server.getGameState().getBoardProperties().getElements())
-                            .flatMap(Arrays::stream)
-                            .filter(el -> el.getSign() == 'o' && !el.isUsed()).count();
-                    k -= 1;
-                    server.getGameState().increaseWaterLevel(k*0.5);
                 }
             }, 500, 200);
 
+            readThread = new Thread(new Read(server, objectInputStream,lock,identity));
+            readThread.start();
+
             GameState state, in;
             while(true){
-                try {
-                    in = (GameState) objectInputStream.readObject();
+                if(server.isChange()) {
                     synchronized (lock) {
-                        state = server.getGameState();
-                        state.updateOne(in, identity);
-                        if (in.isChangesInElements()) {
-                            //state.setBoardProperties(in.getBoardProperties());
-                            state.updateChanged(in);
-                        }
-
-                        GameState out = new GameState(state);
+                        GameState out = new GameState(server.getGameState());
                         objectOutputStream.writeObject(out);
+                        server.setChange(false);
                     }
-
-                } catch (ClassNotFoundException | IOException e){
-                    e.printStackTrace();
-                    break;
                 }
             }
         }catch (IOException e){
@@ -150,4 +152,44 @@ class ThreadedHandler implements Runnable {
     }
 }
 
+class Read implements Runnable {
+
+    private Server server;
+    private ObjectInputStream inputStream;
+    private Object lock;
+    private int identity;
+
+    public Read(Server server, ObjectInputStream inputStream, Object lock, int identity) {
+        this.server = server;
+        this.inputStream = inputStream;
+        this.lock = lock;
+        this.identity = identity;
+    }
+
+    @Override
+    public void run() {
+        GameState in;
+        GameState state;
+        while(true){
+            try {
+                in = (GameState) inputStream.readObject();
+
+                synchronized (lock) {
+                    state = server.getGameState();
+                    server.setChange(!state.equals(in) || !state.getPlayersProperties().equals(in.getPlayersProperties()));
+                    state.updateOne(in, identity);
+                    if (in.isChangesInElements()) {
+                        //state.setBoardProperties(in.getBoardProperties());
+                        state.updateChanged(in);
+                    }
+                    lock.notifyAll();
+                }
+
+            } catch (ClassNotFoundException | IOException e){
+                e.printStackTrace();
+                break;
+            }
+        }
+    }
+}
 
