@@ -127,8 +127,10 @@ class ThreadedHandler implements Runnable {
                                 .flatMap(Arrays::stream)
                                 .filter(el -> el.getSign() == 'o' && !el.isUsed()).count();
                         k -= 1;
-                        server.getGameState().increaseWaterLevel(k * 0.5);
-                        server.setChange(true);
+                        if(k!=0) {
+                            server.getGameState().increaseWaterLevel(k * 0.5);
+                            server.setChange(true);
+                        }
                     }
                 }
             }, 500, 200);
@@ -143,6 +145,7 @@ class ThreadedHandler implements Runnable {
                         GameState out = new GameState(server.getGameState());
                         objectOutputStream.writeObject(out);
                         server.setChange(false);
+                        server.getGameState().setMessage("", identity^1);
                     }
                 }
             }
@@ -176,6 +179,7 @@ class Read implements Runnable {
 
                 synchronized (lock) {
                     state = server.getGameState();
+                    state.setMessage(in.getMessage(identity), identity);
                     server.setChange(!state.equals(in) || !state.getPlayersProperties().equals(in.getPlayersProperties()));
                     state.updateOne(in, identity);
                     if (in.isChangesInElements()) {
